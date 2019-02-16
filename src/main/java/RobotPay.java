@@ -3,21 +3,27 @@ import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.chrome.ChromeDriverService;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.ExpectedCondition;
 import org.openqa.selenium.support.ui.WebDriverWait;
-
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.Paths;
 import java.util.Timer;
-
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.HttpClientBuilder;
+import java.io.IOException;
 
 public class RobotPay {
-    private WebDriver driver = null;
+    private ChromeDriver driver = null;
+	private ChromeDriverService driverService = null;
     private Object mutex = new Object();
     private Queue<OrderPayTuple> payqueue = new ConcurrentLinkedQueue();
     private String account = null;
@@ -89,13 +95,15 @@ public class RobotPay {
     }
 
     //打开浏览器
-    public void eusureOpen() {
+    public void eusureOpen() throws IOException {
         synchronized (mutex) {
             try {
                 driver.getWindowHandles();
             } catch (Exception e) {
                 System.out.println("浏览器未打开 开始打开浏览器");
-                driver = new ChromeDriver(options);
+                driverService = ChromeDriverService.createDefaultService();
+                driver = new ChromeDriver(driverService, options);
+				enableHeadlessDownload();
                 System.out.println("浏览器打开成功");
             }
         }
@@ -418,6 +426,23 @@ public class RobotPay {
         public int hashCode() {
             return 0;
         }
+    }
+	
+	private void enableHeadlessDownload() throws IOException {
+        Map<String, Object> commandParams = new HashMap<>();
+        commandParams.put("cmd", "Page.setDownloadBehavior");
+        Map<String, String> params = new HashMap<>();
+        params.put("behavior", "allow");
+        params.put("downloadPath", new File(RobotPay.class.getClassLoader().getResource("alipaycaptchatmp/").getFile()).getAbsolutePath());
+        commandParams.put("params", params);
+        ObjectMapper objectMapper = new ObjectMapper();
+        HttpClient httpClient = HttpClientBuilder.create().build();
+        String command = objectMapper.writeValueAsString(commandParams);
+        String u = driverService.getUrl().toString() + "/session/" + driver.getSessionId() + "/chromium/send_command";
+        HttpPost request = new HttpPost(u);
+        request.addHeader("content-type", "application/json");
+        request.setEntity(new StringEntity(command));
+        httpClient.execute(request);
     }
 }
 
